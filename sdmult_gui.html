@@ -86,17 +86,17 @@ input[type=text]:focus { outline: 1px solid var(--accent); }
 #go { height: 44px; min-width: 170px; font-size: 16px; background: var(--accent); color: var(--ink); }
 #go.off { background: var(--buttonOff); color: var(--dimInk); }
 
-#modal { position: absolute; inset: 48px 0 0 0; background: color-mix(in srgb, var(--panelEdge) 78%, transparent); display: flex;
+.overlay { position: absolute; inset: 48px 0 0 0; background: color-mix(in srgb, var(--panelEdge) 78%, transparent); display: flex;
   align-items: center; justify-content: center; }
-#modal .box { width: 460px; background: var(--panel); border: 1px solid var(--panelEdge); border-top: 3px solid var(--accent);
+.overlay .box { width: 460px; background: var(--panel); border: 1px solid var(--panelEdge); border-top: 3px solid var(--accent);
   border-radius: 3px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
-#modal h2 { margin: 0; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
+.overlay h2 { margin: 0; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
 #modal ul { margin: 0; padding: 8px 10px; list-style: none; background: color-mix(in srgb, var(--panelEdge) 60%, transparent);
   border-radius: 3px; max-height: 170px; overflow-y: auto; font-size: 14px; font-variant-numeric: tabular-nums; }
 #modal li { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
 #modal li span:last-child { color: var(--dimInk); }
-#modal .btns { display: flex; justify-content: flex-end; gap: 6px; }
-#modal .btns button { height: 40px; min-width: 120px; }
+.overlay .btns { display: flex; justify-content: flex-end; gap: 6px; }
+.overlay .btns button { height: 40px; min-width: 120px; }
 @media (prefers-reduced-motion: reduce) { .slot .led { animation: none !important; } .slot .bar i { transition: none; } }
 </style>
 </head>
@@ -136,7 +136,13 @@ input[type=text]:focus { outline: 1px solid var(--accent); }
     <button id="go"></button>
   </div>
 
-  <div id="modal" hidden><div class="box">
+  <div id="keyBox" class="overlay" hidden><form class="box" id="keyForm">
+    <h2>Enter access key</h2>
+    <div class="hint" id="keyText">Open SD Duplicator once from the app menu and this browser remembers the key. Or type it here: it's the part after <b>#</b> in the link printed when the duplicator was installed.</div>
+    <input type="text" id="keyIn" autocomplete="off" spellcheck="false" aria-label="Access key">
+    <div class="btns"><button type="submit" class="on" id="keyOk">Unlock</button></div>
+  </form></div>
+  <div id="modal" class="overlay" hidden><div class="box">
     <h2 id="mTitle"></h2>
     <div class="hint" id="mText"></div>
     <ul id="mList"></ul>
@@ -153,8 +159,12 @@ const T = {
 };
 let lang = "en";
 const $ = (id) => document.getElementById(id);
-const key = decodeURIComponent(location.hash.slice(1));
-const DEMO = !key || key === "demo";
+const hashKey = decodeURIComponent(location.hash.slice(1));
+const DEMO = hashKey === "demo" || !/^https?:$/.test(location.protocol);
+function storedKey() { try { return localStorage.getItem("sdmult-key") || ""; } catch (e) { return ""; } }
+function storeKey(k) { try { k ? localStorage.setItem("sdmult-key", k) : localStorage.removeItem("sdmult-key"); } catch (e) {} }
+let key = DEMO ? "" : (hashKey || storedKey());
+if (!DEMO && hashKey) { storeKey(hashKey); history.replaceState(null, "", location.pathname + location.search); }
 
 const ui = { mode: "clone", verify: true, source: null, image: null, targets: new Set(), name: "" };
 let state = { disks: [], images: [], job: null, busy: false, free: 0 };
@@ -174,9 +184,11 @@ addEventListener("resize", fit);
 /* ---------- API (real or demo) ---------- */
 async function api(path, body) {
   if (DEMO) return demoApi(path, body);
-  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Key": key, "Content-Type": "application/json" },
+  if (!key) { showKeyBox(); throw new Error("Enter the access key."); }
+  const r = await fetch(path.replace(/^\//, ""), { method: body ? "POST" : "GET", headers: { "X-Key": key, "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({ error: "Bad reply from the Pi" }));
+  if (r.status === 403) { key = ""; storeKey(""); showKeyBox("That key didn't work. Check it and try again."); }
   if (!r.ok) throw new Error(j.error || "Request failed");
   return j;
 }
@@ -306,6 +318,9 @@ $("go").onclick = async () => {
   }
   $("modal").hidden = false; $("mOk").focus();
 };
+function showKeyBox(msg) { if (msg) $("keyText").textContent = msg; $("keyBox").hidden = false; setTimeout(() => $("keyIn").focus(), 0); }
+$("keyForm").addEventListener("submit", async (e) => { e.preventDefault(); const k = $("keyIn").value.trim().replace(/^.*#/, "");
+  if (!k) return; key = k; storeKey(k); $("keyBox").hidden = true; lastErr = ""; await refresh(); });
 $("mCancel").onclick = () => { $("modal").hidden = true; };
 $("mOk").onclick = async () => {
   $("modal").hidden = true;
@@ -320,7 +335,7 @@ addEventListener("keydown", e => { if (e.key === "Escape") $("modal").hidden = t
 
 async function refresh() {
   try { state = await api("/api/state"); if (lastErr.startsWith("Lost")) lastErr = ""; }
-  catch (e) { lastErr = e.message.includes("key") ? e.message + " Open the link printed when the GUI started." : "Lost contact with the Pi: " + e.message; }
+  catch (e) { lastErr = /key/i.test(e.message) ? "Enter the access key to continue." : "Lost contact with the Pi: " + e.message; }
   render();
 }
 

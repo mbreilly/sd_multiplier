@@ -27,6 +27,10 @@ erased. Each card then shows its own progress bar and ends as "verified ✓" or
 "FAILED" with the reason. The system disk is shown as locked. The page fits the
 800×480 Pi touchscreen and scales to any window.
 
+The browser remembers the access key after the first visit, so a plain
+`http://localhost:8765/` link (for example on a landing page) works afterwards.
+If the key is missing it asks for it.
+
 To reach it from a laptop or phone, run it on the LAN instead:
 `sudo sdmult-gui --host 0.0.0.0` (anyone needs the printed key to use it).
 Colours can be tuned with `ui-designer/sdmult-colors.html`; after editing
