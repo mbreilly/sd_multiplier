@@ -149,10 +149,7 @@ input[type=text]:focus { outline: 1px solid var(--accent); }
 const T = {
   en: { mode: "Mode", clone: "Clone card", fromImage: "From image", saveImage: "Save image", verify: "Verify", on: "On", off: "Off",
         targets: "Targets", all: "All", none: "None", cancel: "Cancel", source: "Master card", image: "Image", name: "Image name",
-        subtitle: "КОПИР  ·  1 → N  ·  Raspberry Pi" },
-  ru: { mode: "Режим", clone: "Копия", fromImage: "Из образа", saveImage: "В образ", verify: "Проверка", on: "Вкл", off: "Выкл",
-        targets: "Приёмники", all: "Все", none: "Нет", cancel: "Отмена", source: "Оригинал", image: "Образ", name: "Имя образа",
-        subtitle: "SD-КОПИР  ·  1 → N  ·  Raspberry Pi" },
+        subtitle: "1 → N COPIER  ·  WRITE + VERIFY  ·  Raspberry Pi" },
 };
 let lang = "en";
 const $ = (id) => document.getElementById(id);
@@ -252,14 +249,13 @@ function render() {
   // footer
   const go = $("go");
   if (j && j.phase) {
-    go.textContent = busy ? (lang === "ru" ? "Идёт…" : "Working…") : "OK";
+    go.textContent = busy ? "Working…" : "OK";
     go.disabled = busy; go.classList.toggle("off", busy);
     const secs = j.elapsed, mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, "0");
     setStatus((j.error && !busy ? "⚠ " : "") + (j.message || j.phase) + (j.error && !j.message ? ": " + j.error : "") + `  ·  ${mm}:${ss}`);
   } else {
     const n = ui.targets.size, ready = readyCheck();
-    go.textContent = ui.mode === "read" ? (lang === "ru" ? "Сохранить" : "Save image")
-      : (lang === "ru" ? `Пуск (${n})` : `Write ${n} card${n === 1 ? "" : "s"}`);
+    go.textContent = ui.mode === "read" ? "Save image" : `Write ${n} card${n === 1 ? "" : "s"}`;
     go.disabled = !!ready; go.classList.toggle("off", !!ready);
     setStatus(lastErr ? "⚠ " + lastErr : (ready || "Ready."));
   }
@@ -371,7 +367,7 @@ function demoPreset() {   // a mid-job frame for screenshots and the colour desi
 }
 
 /* ---------- hooks for the colour designer ---------- */
-window.setLang = (l) => { lang = l; document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t)); $("subtitle").textContent = t("subtitle"); render(); };
+window.setLang = () => { document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t)); $("subtitle").textContent = t("subtitle"); render(); };
 window.setTitle = (s) => { $("title").textContent = s; };
 
 fit(); window.setLang("en");

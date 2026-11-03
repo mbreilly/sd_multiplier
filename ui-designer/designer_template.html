@@ -61,7 +61,6 @@ textarea { width: 100%; min-height: 230px; font: 12px/1.5 var(--mono); color: va
     <div class="field"><span class="label">Presets</span><div class="presets" id="presets"></div></div>
     <div id="tokens" style="display:grid;gap:10px"></div>
     <div class="field"><label class="label" for="titleIn">Title text</label><input id="titleIn" type="text" maxlength="30"></div>
-    <div class="row"><span class="label">Panel labels</span><button id="lEn">English</button><button id="lRu">Русский</button></div>
     <div class="field">
       <span class="label">Summary for Claude</span>
       <textarea id="summary" readonly></textarea>
@@ -89,7 +88,7 @@ const PRESETS = {
   "Steel blue": { panel: "#38424C", panelEdge: "#161B21", ink: "#E6ECF1", dimInk: "#8C9AA6", accent: "#F07B2C", knobBody: "#12161A", buttonOff: "#202830", screw: "#76838F" },
   "Bone & ink": { panel: "#5B5750", panelEdge: "#1E1C19", ink: "#F4EEDF", dimInk: "#B4AC98", accent: "#C8352A", knobBody: "#191816", buttonOff: "#3A3732", screw: "#9A9282" },
 };
-let st = { colors: { ...PRESETS["Current"] }, title: "SD Duplicator", lang: "en", preset: "Current" };
+let st = { colors: { ...PRESETS["Current"] }, title: "SD Duplicator", preset: "Current" };
 try { const s = JSON.parse(localStorage.getItem("sdmult-colors") || "null"); if (s && s.colors) st = { ...st, ...s }; } catch (e) {}
 function save() { try { localStorage.setItem("sdmult-colors", JSON.stringify(st)); } catch (e) {} }
 
@@ -100,8 +99,7 @@ function applyAll() {
   const w = win(); if (!w || !w.document || !w.setLang) return;
   const r = w.document.documentElement;
   for (const [k] of TOKENS) r.style.setProperty("--" + k, st.colors[k]);
-  w.setTitle(st.title); w.setLang(st.lang);
-  $("lEn").classList.toggle("on", st.lang === "en"); $("lRu").classList.toggle("on", st.lang === "ru");
+  w.setTitle(st.title);
   document.querySelectorAll("#presets button").forEach(b => b.classList.toggle("on", b.dataset.p === st.preset));
   summary(); save();
 }
@@ -109,7 +107,6 @@ function summary() {
   const lines = ["SD Duplicator UI colors:"];
   for (const [k, nm] of TOKENS) lines.push(`  ${(nm + ":").padEnd(17)}${st.colors[k]}   (${k})`);
   lines.push(`  ${"Title:".padEnd(17)}${st.title.toUpperCase()}`);
-  lines.push(`  ${"Labels:".padEnd(17)}${st.lang === "ru" ? "Russian" : "English"}`);
   $("summary").value = lines.join("\n");
 }
 function loadFrame(busy) {
@@ -138,8 +135,6 @@ for (const p of Object.keys(PRESETS)) {
 }
 $("titleIn").value = st.title;
 $("titleIn").oninput = e => { st.title = e.target.value || "SD Duplicator"; applyAll(); };
-$("lEn").onclick = () => { st.lang = "en"; applyAll(); };
-$("lRu").onclick = () => { st.lang = "ru"; applyAll(); };
 $("stIdle").onclick = () => loadFrame(false);
 $("stBusy").onclick = () => loadFrame(true);
 $("copy").onclick = () => {
