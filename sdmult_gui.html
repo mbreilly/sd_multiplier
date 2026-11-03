@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SD Duplicator</title>
+<style>
+/* Hardware panel, 800x480 (official Pi touchscreen); scaled to fit any window. */
+:root {
+  --panel: #20232C; --panelEdge: #131416; --ink: #E3E3E3; --dimInk: #E3E3E3;
+  --accent: #E0A33A; --knobBody: #1C1B17; --buttonOff: #2E2F23; --screw: #8A8768;
+  --font: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--panelEdge); overflow: hidden; }
+body { font-family: var(--font); color: var(--ink); -webkit-user-select: none; user-select: none; }
+#stage { position: absolute; left: 0; top: 0; width: 800px; height: 480px; transform-origin: 0 0; }
+.panel { position: absolute; inset: 0; overflow: hidden;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--panel), white 6%), color-mix(in srgb, var(--panel), black 15%)); }
+
+header { position: absolute; left: 0; right: 0; top: 0; height: 48px; background: var(--panelEdge);
+  border-bottom: 3px solid var(--accent); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+#title { font-size: 22px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#subtitle { font-size: 12px; color: var(--dimInk); white-space: pre; }
+.screw { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--screw);
+  box-shadow: inset -1px -1px 0 rgba(0,0,0,.35); }
+.screw::after { content: ""; position: absolute; left: 1px; right: 1px; top: 3.5px; height: 1px; background: rgba(0,0,0,.45); transform: rotate(-30deg); }
+
+.lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dimInk); }
+.row { position: absolute; left: 24px; right: 24px; display: flex; align-items: center; gap: 10px; }
+#modeRow { top: 62px; height: 36px; }
+.seg { display: flex; }
+button { font-family: var(--font); font-size: 13px; font-weight: 700; color: var(--dimInk); background: var(--buttonOff);
+  border: 1px solid var(--panelEdge); border-radius: 3px; margin: 2px; height: 32px; padding: 0 12px; cursor: pointer;
+  text-transform: uppercase; letter-spacing: .03em; }
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--buttonOff), white 18%); }
+button:active:not(:disabled) { border-color: var(--ink); }
+button.on, button.on:hover:not(:disabled) { background: var(--accent); color: var(--ink); }
+button:disabled { opacity: .4; cursor: default; }
+button.on:disabled { opacity: .8; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.seg button { min-width: 112px; }
+.spacer { flex: 1; }
+
+#body { position: absolute; left: 24px; right: 24px; top: 108px; height: 292px; display: flex; gap: 12px; }
+.section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.section .head { display: flex; align-items: center; gap: 6px; height: 26px; }
+.section .head button { height: 24px; font-size: 11px; padding: 0 8px; }
+#srcSec { width: 226px; flex: none; }
+.divider { width: 1px; background: var(--panelEdge); margin: 0 0; flex: none; }
+#tgtSec { flex: 1; }
+.list { display: grid; gap: 6px; overflow-y: auto; align-content: start; padding-right: 2px; flex: 1; }
+#tgtList { grid-template-columns: 1fr 1fr; }
+.list::-webkit-scrollbar { width: 6px; } .list::-webkit-scrollbar-thumb { background: var(--buttonOff); border-radius: 3px; }
+
+.slot { position: relative; height: 62px; border-radius: 3px; background: color-mix(in srgb, var(--panelEdge) 60%, transparent);
+  border: 1px solid var(--panelEdge); padding: 7px 10px 0 26px; cursor: pointer; overflow: hidden; }
+.slot.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slot.locked { cursor: default; opacity: .55; }
+.slot .led { position: absolute; left: 9px; top: 11px; width: 9px; height: 9px; border-radius: 50%; background: var(--buttonOff);
+  box-shadow: inset 0 0 0 1px var(--panelEdge); }
+.slot.sel .led, .slot.busy .led, .slot.ok .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.slot.busy .led { animation: blink .7s steps(2) infinite; }
+.slot.bad .led { background: var(--ink); animation: blink .35s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.slot .l1 { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; gap: 6px; }
+.slot .l1 span:last-child { font-weight: 400; font-variant-numeric: tabular-nums; }
+.slot .l2 { font-size: 11px; color: var(--dimInk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+.slot .bar { position: absolute; left: 26px; right: 10px; bottom: 7px; height: 5px; background: var(--panelEdge); border-radius: 2px; overflow: hidden; display: none; }
+.slot .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s linear; }
+.slot.bad .bar i { background: repeating-linear-gradient(135deg, var(--ink) 0 4px, transparent 4px 8px); width: 100% !important; }
+.slot.busy .bar, .slot.ok .bar, .slot.bad .bar { display: block; }
+.slot.busy .l2, .slot.ok .l2, .slot.bad .l2 { color: var(--ink); }
+.empty { font-size: 12px; color: var(--dimInk); padding: 14px 4px; line-height: 1.5; grid-column: 1 / -1; }
+input[type=text] { font-family: var(--font); font-size: 15px; color: var(--ink); background: color-mix(in srgb, var(--panelEdge) 60%, transparent);
+  border: 1px solid var(--panelEdge); border-radius: 3px; height: 34px; padding: 0 10px; width: 100%; }
+input[type=text]:focus { outline: 1px solid var(--accent); }
+.hint { font-size: 11px; color: var(--dimInk); line-height: 1.45; }
+
+#foot { top: 412px; height: 48px; }
+#status { flex: 1; height: 40px; border-radius: 3px; background: color-mix(in srgb, var(--panelEdge) 60%, transparent);
+  display: flex; align-items: center; padding: 0 12px; font-size: 15px; min-width: 0; }
+#status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#go { height: 44px; min-width: 170px; font-size: 16px; background: var(--accent); color: var(--ink); }
+#go.off { background: var(--buttonOff); color: var(--dimInk); }
+
+#modal { position: absolute; inset: 48px 0 0 0; background: color-mix(in srgb, var(--panelEdge) 78%, transparent); display: flex;
+  align-items: center; justify-content: center; }
+#modal .box { width: 460px; background: var(--panel); border: 1px solid var(--panelEdge); border-top: 3px solid var(--accent);
+  border-radius: 3px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#modal h2 { margin: 0; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
+#modal ul { margin: 0; padding: 8px 10px; list-style: none; background: color-mix(in srgb, var(--panelEdge) 60%, transparent);
+  border-radius: 3px; max-height: 170px; overflow-y: auto; font-size: 14px; font-variant-numeric: tabular-nums; }
+#modal li { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
+#modal li span:last-child { color: var(--dimInk); }
+#modal .btns { display: flex; justify-content: flex-end; gap: 6px; }
+#modal .btns button { height: 40px; min-width: 120px; }
+@media (prefers-reduced-motion: reduce) { .slot .led { animation: none !important; } .slot .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div id="stage"><div class="panel">
+  <header><div id="title">SD Duplicator</div><div id="subtitle"></div></header>
+  <div class="screw" style="left:6px;top:54px"></div><div class="screw" style="right:6px;top:54px"></div>
+  <div class="screw" style="left:6px;bottom:6px"></div><div class="screw" style="right:6px;bottom:6px"></div>
+
+  <div class="row" id="modeRow">
+    <span class="lbl" data-t="mode">Mode</span>
+    <div class="seg" role="radiogroup">
+      <button id="m-clone" data-mode="clone" data-t="clone">Clone card</button>
+      <button id="m-write" data-mode="write" data-t="fromImage">From image</button>
+      <button id="m-read" data-mode="read" data-t="saveImage">Save image</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="lbl" data-t="verify">Verify</span>
+    <div class="seg"><button id="v-on" data-t="on">On</button><button id="v-off" data-t="off">Off</button></div>
+  </div>
+
+  <div id="body">
+    <div class="section" id="srcSec">
+      <div class="head"><span class="lbl" id="srcLbl"></span></div>
+      <div class="list" id="srcList"></div>
+    </div>
+    <div class="divider" id="div"></div>
+    <div class="section" id="tgtSec">
+      <div class="head"><span class="lbl" data-t="targets">Targets</span><span class="spacer"></span>
+        <button id="all" data-t="all">All</button><button id="none" data-t="none">None</button></div>
+      <div class="list" id="tgtList"></div>
+    </div>
+  </div>
+
+  <div class="row" id="foot">
+    <div id="status"><span id="statusText"></span></div>
+    <button id="go"></button>
+  </div>
+
+  <div id="modal" hidden><div class="box">
+    <h2 id="mTitle"></h2>
+    <div class="hint" id="mText"></div>
+    <ul id="mList"></ul>
+    <div class="btns"><button id="mCancel" data-t="cancel">Cancel</button><button id="mOk" class="on"></button></div>
+  </div></div>
+</div></div>
+
+<script>
+"use strict";
+const T = {
+  en: { mode: "Mode", clone: "Clone card", fromImage: "From image", saveImage: "Save image", verify: "Verify", on: "On", off: "Off",
+        targets: "Targets", all: "All", none: "None", cancel: "Cancel", source: "Master card", image: "Image", name: "Image name",
+        subtitle: "КОПИР  ·  1 → N  ·  Raspberry Pi" },
+  ru: { mode: "Режим", clone: "Копия", fromImage: "Из образа", saveImage: "В образ", verify: "Проверка", on: "Вкл", off: "Выкл",
+        targets: "Приёмники", all: "Все", none: "Нет", cancel: "Отмена", source: "Оригинал", image: "Образ", name: "Имя образа",
+        subtitle: "SD-КОПИР  ·  1 → N  ·  Raspberry Pi" },
+};
+let lang = "en";
+const $ = (id) => document.getElementById(id);
+const key = decodeURIComponent(location.hash.slice(1));
+const DEMO = !key || key === "demo";
+
+const ui = { mode: "clone", verify: true, source: null, image: null, targets: new Set(), name: "" };
+let state = { disks: [], images: [], job: null, busy: false, free: 0 };
+let lastErr = "";
+
+function human(n) { const u = ["B","KB","MB","GB","TB"]; let i = 0; n = +n;
+  while (n >= 1000 && i < 4) { n /= 1000; i++; } return i ? n.toFixed(n < 10 ? 1 : 0) + " " + u[i] : n + " B"; }
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function t(k) { return T[lang][k] || k; }
+
+/* ---------- scaling to the window ---------- */
+function fit() { const s = Math.min(innerWidth / 800, innerHeight / 480, 2);
+  const st = $("stage"); st.style.transform = `scale(${s})`;
+  st.style.left = (innerWidth - 800 * s) / 2 + "px"; st.style.top = (innerHeight - 480 * s) / 2 + "px"; }
+addEventListener("resize", fit);
+
+/* ---------- API (real or demo) ---------- */
+async function api(path, body) {
+  if (DEMO) return demoApi(path, body);
+  const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Key": key, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({ error: "Bad reply from the Pi" }));
+  if (!r.ok) throw new Error(j.error || "Request failed");
+  return j;
+}
+
+/* ---------- render ---------- */
+function job() { return state.job; }
+function cardsFree() { return state.disks.filter(d => !d.system); }
+
+function slotHTML(d, opts) {
+  const js = job() && job().cards[d.path];
+  let cls = "slot", l2 = esc(d.model || (d.bus ? d.bus.toUpperCase() + " reader" : "Card")) + (d.mounted ? " · mounted" : "");
+  let pct = 0;
+  if (d.system) { cls += " locked"; l2 = "System disk · locked"; }
+  else if (js && js.phase !== "queued") {
+    pct = js.pct;
+    if (js.error || js.phase === "failed") { cls += " bad"; l2 = "FAILED · " + esc(js.error || ""); }
+    else if (js.phase === "done") { cls += " ok"; l2 = opts.isSource ? "Read complete" : (ui.verifyUsed ? "Written · verified ✓" : "Written ✓"); }
+    else { cls += " busy"; l2 = `${js.phase} ${js.pct.toFixed(0)}% · ${js.rate} MB/s`; }
+  } else if (js) { cls += " busy"; l2 = "waiting"; }
+  if (opts.sel) cls += " sel";
+  return `<div class="${cls}" data-path="${esc(d.path)}" role="button" tabindex="0">
+    <span class="led"></span>
+    <div class="l1"><span>${esc(d.name)}</span><span>${human(d.size)}</span></div>
+    <div class="l2">${l2}</div><div class="bar"><i style="width:${pct}%"></i></div></div>`;
+}
+
+function render() {
+  const busy = state.busy, j = job();
+  const lockUI = busy || (j && j.phase);   // while a job is shown, freeze choices
+  for (const m of ["clone", "write", "read"]) { const b = $("m-" + m); b.classList.toggle("on", ui.mode === m); b.disabled = !!lockUI; b.setAttribute("aria-checked", ui.mode === m); }
+  $("v-on").classList.toggle("on", ui.verify); $("v-off").classList.toggle("on", !ui.verify);
+  $("v-on").disabled = $("v-off").disabled = !!lockUI;
+
+  // drop selections for cards that disappeared
+  const paths = new Set(state.disks.map(d => d.path));
+  if (!lockUI) { for (const p of [...ui.targets]) if (!paths.has(p) || p === ui.source) ui.targets.delete(p);
+    if (ui.source && !paths.has(ui.source)) ui.source = null;
+    if (ui.image && !state.images.some(i => i.name === ui.image)) ui.image = null; }
+
+  // source column
+  const src = $("srcList");
+  if (ui.mode === "write") {
+    $("srcLbl").textContent = t("image");
+    setHTML(src, state.images.length ? state.images.map(im => `<div class="slot ${ui.image === im.name ? "sel" : ""}${lockUI ? " locked" : ""}" data-image="${esc(im.name)}" role="button" tabindex="0">
+        <span class="led"></span><div class="l1"><span>${esc(im.name.replace(/\.img$/, ""))}</span><span>${human(im.size)}</span></div>
+        <div class="l2">${new Date(im.mtime * 1000).toLocaleDateString()}</div></div>`).join("")
+      : `<div class="empty">No saved images yet. Use SAVE IMAGE to store a master card here.</div>`);
+  } else {
+    $("srcLbl").textContent = t("source");
+    const cands = lockUI && job().source ? cardsFree().filter(d => d.path === job().source) : cardsFree();
+    let html = cands.length ? cands.map(d => slotHTML(d, { sel: ui.source === d.path, isSource: true })).join("")
+      : `<div class="empty">Plug in the master card.</div>`;
+    if (ui.mode === "read") html += `<span class="lbl" style="margin-top:6px">${t("name")}</span>
+      <input type="text" id="imgName" maxlength="60" placeholder="e.g. kiosk-v3" ${lockUI ? "disabled" : ""}>
+      <div class="hint">Saved images appear under FROM IMAGE, so you can make more copies later without the master card.</div>`;
+    setHTML(src, html);
+    const inp = $("imgName");
+    if (inp) { inp.oninput = e => { ui.name = e.target.value; }; if (document.activeElement !== inp && inp.value !== ui.name) inp.value = ui.name; }
+  }
+
+  // targets column
+  const showT = ui.mode !== "read";
+  $("tgtSec").style.visibility = $("div").style.visibility = showT ? "" : "hidden";
+  const tl = $("tgtList");
+  const tg = state.disks.filter(d => d.path !== (ui.mode === "clone" ? ui.source : null));
+  setHTML(tl, tg.length ? tg.map(d => slotHTML(d, { sel: ui.targets.has(d.path) })).join("")
+    : `<div class="empty">Plug in blank cards through USB readers. They show up here on their own.</div>`);
+  $("all").disabled = $("none").disabled = !!lockUI;
+
+  // footer
+  const go = $("go");
+  if (j && j.phase) {
+    go.textContent = busy ? (lang === "ru" ? "Идёт…" : "Working…") : "OK";
+    go.disabled = busy; go.classList.toggle("off", busy);
+    const secs = j.elapsed, mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, "0");
+    setStatus((j.error && !busy ? "⚠ " : "") + (j.message || j.phase) + (j.error && !j.message ? ": " + j.error : "") + `  ·  ${mm}:${ss}`);
+  } else {
+    const n = ui.targets.size, ready = readyCheck();
+    go.textContent = ui.mode === "read" ? (lang === "ru" ? "Сохранить" : "Save image")
+      : (lang === "ru" ? `Пуск (${n})` : `Write ${n} card${n === 1 ? "" : "s"}`);
+    go.disabled = !!ready; go.classList.toggle("off", !!ready);
+    setStatus(lastErr ? "⚠ " + lastErr : (ready || "Ready."));
+  }
+}
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+function setStatus(s) { $("statusText").textContent = s; }
+function readyCheck() {
+  if (ui.mode !== "write" && !ui.source) return "Tap the master card on the left.";
+  if (ui.mode === "write" && !ui.image) return "Tap an image on the left.";
+  if (ui.mode !== "read" && !ui.targets.size) return "Tap the cards to write, or press ALL.";
+  return "";
+}
+
+/* ---------- interaction ---------- */
+function onTap(e) {
+  if (state.busy || (job() && job().phase)) return;
+  const el = e.target.closest(".slot"); if (!el || el.classList.contains("locked")) return;
+  lastErr = "";
+  if (el.dataset.image) ui.image = el.dataset.image;
+  else if (el.closest("#srcList")) { ui.source = el.dataset.path; ui.targets.delete(ui.source); }
+  else { const p = el.dataset.path; ui.targets.has(p) ? ui.targets.delete(p) : ui.targets.add(p); }
+  render();
+}
+for (const id of ["srcList", "tgtList"]) { $(id).addEventListener("click", onTap);
+  $(id).addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(e); } }); }
+for (const m of ["clone", "write", "read"]) $("m-" + m).onclick = () => { ui.mode = m; lastErr = ""; render(); };
+$("v-on").onclick = () => { ui.verify = true; render(); };
+$("v-off").onclick = () => { ui.verify = false; render(); };
+$("all").onclick = () => { cardsFree().forEach(d => { if (!(ui.mode === "clone" && d.path === ui.source)) ui.targets.add(d.path); }); render(); };
+$("none").onclick = () => { ui.targets.clear(); render(); };
+
+$("go").onclick = async () => {
+  if (job() && !state.busy) { await api("/api/dismiss", {}).catch(() => {}); await refresh(); return; }
+  if (readyCheck()) return;
+  const byPath = Object.fromEntries(state.disks.map(d => [d.path, d]));
+  if (ui.mode === "read") {
+    $("mTitle").textContent = "Save master image";
+    $("mText").textContent = "The card below is only read. Nothing is erased.";
+    $("mList").innerHTML = `<li><span>${esc(byPath[ui.source].name)}</span><span>${human(byPath[ui.source].size)}</span></li>`;
+    $("mOk").textContent = "Save";
+  } else {
+    const n = ui.targets.size;
+    $("mTitle").textContent = `Erase ${n} card${n === 1 ? "" : "s"}?`;
+    $("mText").textContent = (ui.mode === "clone" ? `Copy of ${byPath[ui.source].name} goes onto: ` : `Image ${ui.image} goes onto: `)
+      + "everything on these cards is replaced.";
+    $("mList").innerHTML = [...ui.targets].map(p => `<li><span>${esc(byPath[p].name)}${byPath[p].model ? " · " + esc(byPath[p].model) : ""}</span><span>${human(byPath[p].size)}</span></li>`).join("");
+    $("mOk").textContent = `Erase & write`;
+  }
+  $("modal").hidden = false; $("mOk").focus();
+};
+$("mCancel").onclick = () => { $("modal").hidden = true; };
+$("mOk").onclick = async () => {
+  $("modal").hidden = true;
+  ui.verifyUsed = ui.verify;
+  try {
+    await api("/api/start", { mode: ui.mode, source: ui.source, image: ui.image, targets: [...ui.targets], verify: ui.verify, name: ui.name });
+    lastErr = "";
+  } catch (e) { lastErr = e.message; }
+  await refresh();
+};
+addEventListener("keydown", e => { if (e.key === "Escape") $("modal").hidden = true; });
+
+async function refresh() {
+  try { state = await api("/api/state"); if (lastErr.startsWith("Lost")) lastErr = ""; }
+  catch (e) { lastErr = e.message.includes("key") ? e.message + " Open the link printed when the GUI started." : "Lost contact with the Pi: " + e.message; }
+  render();
+}
+
+/* ---------- demo mode (designer preview, no Pi needed) ---------- */
+const demo = { disks: [
+  { path: "/dev/sda", name: "sda", size: 31914983424, model: "Generic SD/MMC reader", bus: "usb", system: false, mounted: true },
+  { path: "/dev/sdb", name: "sdb", size: 31914983424, model: "Transcend TS-RDF5", bus: "usb", system: false, mounted: false },
+  { path: "/dev/sdc", name: "sdc", size: 31267487744, model: "Transcend TS-RDF5", bus: "usb", system: false, mounted: false },
+  { path: "/dev/sdd", name: "sdd", size: 63864569856, model: "SanDisk SDDR-B531", bus: "usb", system: false, mounted: false },
+  { path: "/dev/sde", name: "sde", size: 31914983424, model: "Anker 2-in-1", bus: "usb", system: false, mounted: false },
+  { path: "/dev/mmcblk0", name: "mmcblk0", size: 63864569856, model: "", bus: "", system: true, mounted: true } ],
+  images: [ { name: "kiosk-v3.img", size: 4294967296, mtime: 1761900000 }, { name: "classroom-2026.img", size: 7516192768, mtime: 1762300000 } ],
+  job: null, busy: false, free: 40e9 };
+let demoTick = null;
+function demoApi(path, body) {
+  if (path === "/api/state") return JSON.parse(JSON.stringify(demo));
+  if (path === "/api/dismiss") { demo.job = null; return { ok: true }; }
+  if (path === "/api/start") {
+    const cards = {}; for (const tp of body.targets) cards[tp] = { phase: "queued", pct: 0, rate: 0, error: null };
+    if (body.mode !== "write") cards[body.source] = { phase: "reading", pct: 0, rate: 0, error: null };
+    demo.job = { mode: body.mode, source: body.mode === "write" ? null : body.source, phase: body.mode === "write" ? "writing" : "reading", message: "", error: null, cards, elapsed: 0 };
+    demo.busy = true; let k = 0; clearInterval(demoTick);
+    demoTick = setInterval(() => { k++; const j = demo.job; if (!j) return clearInterval(demoTick); j.elapsed = k;
+      if (j.phase === "reading") { const c = j.cards[body.source]; c.pct = Math.min(100, c.pct + 9); c.rate = 42.3; j.message = "Reading master card";
+        if (c.pct >= 100) { c.phase = "done"; if (body.mode === "read") { j.phase = "done"; j.message = "Saved image"; demo.busy = false; } else j.phase = "writing"; } }
+      else if (j.phase === "writing") { j.message = `Writing ${body.targets.length} cards`; let all = true;
+        body.targets.forEach((tp, i) => { const c = j.cards[tp]; if (c.phase === "done" || c.phase === "failed") return; all = false;
+          if (c.phase === "queued") c.phase = "writing";
+          c.pct = Math.min(100, c.pct + 6 + i); c.rate = c.phase === "writing" ? 18.5 + i : 41.0;
+          if (c.pct >= 100) { if (c.phase === "writing") { c.phase = "verifying"; c.pct = 0; } else c.phase = "done"; } });
+        if (all) { j.phase = "done"; j.message = `${body.targets.length} of ${body.targets.length} cards written and verified`; demo.busy = false; } } }, 400);
+    return { ok: true };
+  }
+}
+function demoPreset() {   // a mid-job frame for screenshots and the colour designer
+  ui.mode = "clone"; ui.source = "/dev/sda"; ui.targets = new Set(["/dev/sdb", "/dev/sdc", "/dev/sdd", "/dev/sde"]); ui.verifyUsed = true;
+  demo.busy = true;
+  demo.job = { mode: "clone", source: "/dev/sda", phase: "writing", message: "Writing 4 cards", error: null, elapsed: 312, cards: {
+    "/dev/sda": { phase: "done", pct: 100, rate: 0, error: null },
+    "/dev/sdb": { phase: "verifying", pct: 38, rate: 41.2, error: null },
+    "/dev/sdc": { phase: "writing", pct: 81, rate: 17.9, error: null },
+    "/dev/sdd": { phase: "writing", pct: 64, rate: 15.1, error: null },
+    "/dev/sde": { phase: "done", pct: 100, rate: 0, error: null } } };
+}
+
+/* ---------- hooks for the colour designer ---------- */
+window.setLang = (l) => { lang = l; document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t)); $("subtitle").textContent = t("subtitle"); render(); };
+window.setTitle = (s) => { $("title").textContent = s; };
+
+fit(); window.setLang("en");
+if (DEMO && new URLSearchParams(location.search).has("busy")) demoPreset();
+refresh(); setInterval(refresh, DEMO ? 400 : 1000);
+</script>
+</body>
+</html>
