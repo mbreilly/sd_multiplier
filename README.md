@@ -17,7 +17,9 @@ cd ~/sd_multiplier && sudo ./install.sh
 This installs to `/opt/sdmult`, starts the GUI as a background service
 (`sdmult-gui`, listening only on `localhost:8765`), and adds **SD Duplicator**
 to the app menu. It prints the full link, including the access key. To update
-later: `git pull && sudo ./install.sh`. To remove: `sudo ./install.sh --remove`.
+later: `git pull && sudo ./install.sh`. To replace the access key (for example
+if it was shared by mistake): `sudo ./install.sh --new-key`; every browser
+then asks for the new one. To remove: `sudo ./install.sh --remove`.
 
 ## GUI
 

@@ -274,7 +274,8 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--images", default="/var/lib/sdmult",
                     help="folder for saved master images")
-    ap.add_argument("--key", help="access key (default: random each start)")
+    ap.add_argument("--key", default=os.environ.get("SDMULT_KEY"),
+                    help="access key (default: $SDMULT_KEY, else random each start)")
     ap.add_argument("--allow-fixed", action="store_true",
                     help="offer non-removable disks too (testing only)")
     args = ap.parse_args(argv)
@@ -285,9 +286,12 @@ def main(argv=None):
     app = App(args.images, args.allow_fixed)
     srv = ThreadingHTTPServer((args.host, args.port), make_handler(app, key))
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
-    print(f"SD Duplicator running. Open:  http://{shown}:{args.port}/#{key}")
+    if os.environ.get("SDMULT_KEY") and key == os.environ["SDMULT_KEY"]:
+        print(f"SD Duplicator running on http://{shown}:{args.port}/ (key from SDMULT_KEY)")
+    else:
+        print(f"SD Duplicator running. Open:  http://{shown}:{args.port}/#{key}")
     if args.host == "0.0.0.0":
-        print(f"From another device use the Pi's IP address with the same #{key} ending.")
+        print("From another device use the Pi's IP address with the same #key ending.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
